@@ -1,0 +1,100 @@
+---
+title: "PCA"
+author: "Kuti K. Matyas"
+date: "March 28, 2017"
+output:
+  html_document: default
+  pdf_document: default
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(plotly)
+library(h2o)
+h2o.init()
+```
+
+## R Markdown
+
+Reading the data and loading into h2o
+```{r}
+data <- read.csv("usps_ch.txt",header = FALSE)
+data <- data[,1:ncol(data)-1] #there is a ',' in the end of each line
+lab <- read.csv("usps_val.txt",header = FALSE)
+colnames(lab) <- c('lab')
+data <- cbind(data,lab)
+#write.csv(data,"usps.csv",append = FALSE,col.names = TRUE,quote = FALSE,row.names = FALSE)
+usps_data <- as.h2o(data,'usps') 
+```
+
+
+## Whole dataset Cumulative proportions
+#### Options
+Principal components analysis of an H2O data frame.(from doc) 
+pca_method = c("GramSVD", "Power", "Randomized", "GLRM")
+transform = c("NONE", "DEMEAN", "DESCALE","STANDARDIZE")(default NONE)
+max_iterations = 1000 (default)
+
+```{r}
+wholeres<-h2o.prcomp(training_frame=usps_data, x=1:256, k=256, compute_metrics = TRUE)
+params <- as.data.frame(wholeres@model$importance)
+cumul_prop <- params["Cumulative Proportion",]
+row.names(cumul_prop) <- c("all")
+allres <- data.frame(x=1:length(cumul_prop["all",]),cumprop=t(cumul_prop["all",]),label="all",stringsAsFactors=FALSE)
+
+
+```
+
+
+
+```{r}
+par <- params["Cumulative Proportion",]
+row.names(par) <- c("all")
+allnum <- data.frame(x=1:length(par["all",]),y=t(par["all",]),label="Cumulative Proportion")
+par <- params["Proportion of Variance",]
+row.names(par) <- c("all")
+allnum <- rbind(allnum,data.frame(x=1:length(par["all",]),y=t(par["all",]),label="Proportion of Variance"))
+par <- params["Standard deviation",]
+row.names(par) <- c("all")
+allnum <- rbind(allnum,data.frame(x=1:length(par["all",]),y=logb(t(par["all",]),base = 10),label="Log Standard Deviation"))
+
+
+plot_ly(allnum,x=~x, y=~all, color = ~label) %>% add_lines() 
+
+```
+
+
+## Each number separately
+```{r}
+
+for(i in 0:9){
+  numdata <- data[data$lab == i,]
+  dfname <- paste('usps_',i,sep = "")
+  part_data <- as.h2o(numdata,dfname) 
+  pcares <- h2o.prcomp(training_frame=part_data, x=1:256, k=256, compute_metrics = TRUE,ignore_const_cols = FALSE)
+  params2 <- as.data.frame(pcares@model$importance)
+  c_prop <- params2["Cumulative Proportion",]
+  row.names(c_prop) <- c("all") 
+  cumul_prop <- rbind(cumul_prop,c_prop)
+  numres <- data.frame(x=1:length(c_prop["all",]),cumprop=t(c_prop["all",]),label=dfname)
+  allres <- rbind(allres,numres)
+}
+plot_ly(allres,x=~x,y=~all,color=~label)%>%add_lines()
+
+```
+
+
+```{r}
+summary(wholeres)
+```
+
+
+
+
+
+### Eigenvectors
+```{r}
+pcares@model$eigenvectors
+```
+
