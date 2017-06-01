@@ -23,7 +23,7 @@ data <- read.csv("usps_ch.txt",header = FALSE)
 data <- data[,1:ncol(data)-1] #there is a ',' in the end of each line
 lab <- read.csv("usps_val.txt",header = FALSE)
 colnames(lab) <- c('lab')
-data <- cbind(data,lab)
+labeled_data <- cbind(data,lab)
 #write.csv(data,"usps.csv",append = FALSE,col.names = TRUE,quote = FALSE,row.names = FALSE)
 usps_data <- as.h2o(data,'usps') 
 ```
@@ -69,7 +69,7 @@ plot_ly(allnum,x=~x, y=~all, color = ~label) %>% add_lines()
 ```{r}
 
 for(i in 0:9){
-  numdata <- data[data$lab == i,]
+  numdata <- labeled_data[labeled_data$lab == i,]
   dfname <- paste('usps_',i,sep = "")
   part_data <- as.h2o(numdata,dfname) 
   pcares <- h2o.prcomp(training_frame=part_data, x=1:256, k=256, compute_metrics = TRUE,ignore_const_cols = FALSE)
@@ -95,6 +95,27 @@ summary(wholeres)
 
 ### Eigenvectors
 ```{r}
-pcares@model$eigenvectors
+ 
+pcares@model$eigenvectors$pc1
+```
+## 2D and 3D projection (2,3 eigendirections){.tabset}
+```{r}
+lb2 <- lapply(lab,as.character) #to have labels
+proj <- data.matrix(data[,]) %*% cbind(wholeres@model$eigenvectors$pc1,wholeres@model$eigenvectors$pc2,wholeres@model$eigenvectors$pc3)
+proj <- data.frame(x=proj[,1],y=proj[,2],z=proj[,3],label=lb2$lab)
+
+```
+### 2D
+```{r}
+plot_ly(proj,x=~x,y=~y,color =~label,type ='scatter',text=~label) #3d
 ```
 
+### 3D
+```{r}
+plot_ly(proj,x=~x,y=~y,z=~z,color =~label,type ='scatter3d',text=~label) #3d
+```
+
+
+
+
+###
