@@ -4,21 +4,22 @@ author: "Kuti K. Matyas"
 date: "March 28, 2017"
 output:
   html_document: default
-  pdf_document: default
-  
 ---
 
-```{r setup, include=FALSE}
+In my work I used the open source [H2O](https://www.h2o.ai/) R package for PCA. The H2O package actually is just a REST client for an H2O cluster. Used locally it can start up a 'local cluster' which can be used through Python, R, Java, Scala APIs or through WebUI(Flow). 
+
+For the interactive visualizations I used [Plotly's](https://plot.ly/r/) R library. It has other API-s for example in Python Matlab Scala Julia etc. (and Javascript as native) 
+```{r setup, message=FALSE, error=FALSE,warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(plotly)
 library(h2o)
-h2o.init()
+h2o.init() #local initialization
 ```
 
-## R Markdown
+## 1. Reading the data
 
-Reading the data and loading into h2o
-```{r}
+To be able to work with the data first we have to read and "upload" to the cluster. It has options to load data from Amazon S3, Hadoop HDFS, SQL and NoSql stores but now we just read from local filesystem.
+```{r, message=FALSE, error=FALSE,warning=FALSE}
 data <- read.csv("usps_ch.txt",header = FALSE)
 data <- data[,1:ncol(data)-1] #there is a ',' in the end of each line
 lab <- read.csv("usps_val.txt",header = FALSE)
@@ -27,16 +28,39 @@ labeled_data <- cbind(data,lab)
 #write.csv(data,"usps.csv",append = FALSE,col.names = TRUE,quote = FALSE,row.names = FALSE)
 usps_data <- as.h2o(data,'usps') 
 ```
+When we work with the 'cluster' it gives as feedback the percentage of completion of the tasks, which is then 'knitted'(rendered) into the document.
 
+#### 1.1 Check a few number {.tabset}
 
-## Whole dataset Cumulative proportions
-#### Options
-Principal components analysis of an H2O data frame.(from doc) 
-pca_method = c("GramSVD", "Power", "Randomized", "GLRM")
-transform = c("NONE", "DEMEAN", "DESCALE","STANDARDIZE")(default NONE)
-max_iterations = 1000 (default)
+The numbers are hardly recognizable, but it seems that they are upside down.(or I made some mistake in filling the matrixes). Anyway it shouldn't cause any problem.
 
+##### Num7 
 ```{r}
+image(matrix(unlist(data[4235,]),nrow=16,ncol=16), col = gray(0:64 / 64))
+```
+
+
+
+
+##### Num2
+```{r}
+image(matrix(unlist(data[7638,]),nrow=16,ncol=16), col = gray(0:64 / 64))
+```
+
+##### Num8 
+```{r}
+image(matrix(unlist(data[2681,]),nrow=16,ncol=16), col = gray(0:64 / 64))
+```
+
+
+## Whole dataset PCA and cumulative proportions
+For creating the PCA model from an H2O data frame we can set several parameters. I just used the default ones.
+
+* pca_method = c("GramSVD", "Power", "Randomized", "GLRM") 
+* transform = c("NONE", "DEMEAN", "DESCALE","STANDARDIZE")(default NONE)
+* max_iterations = 1000 (default)
+* ...
+```{r, message=FALSE, error=FALSE,warning=FALSE}
 wholeres<-h2o.prcomp(training_frame=usps_data, x=1:256, k=256, compute_metrics = TRUE)
 params <- as.data.frame(wholeres@model$importance)
 cumul_prop <- params["Cumulative Proportion",]
@@ -48,7 +72,7 @@ allres <- data.frame(x=1:length(cumul_prop["all",]),cumprop=t(cumul_prop["all",]
 
 
 
-```{r}
+```{r, message=FALSE, error=FALSE,warning=FALSE}
 par <- params["Cumulative Proportion",]
 row.names(par) <- c("all")
 allnum <- data.frame(x=1:length(par["all",]),y=t(par["all",]),label="Cumulative Proportion")
@@ -61,13 +85,15 @@ allnum <- rbind(allnum,data.frame(x=1:length(par["all",]),y=logb(t(par["all",]),
 
 
 plot_ly(allnum,x=~x, y=~all, color = ~label) %>% add_lines() 
-
+image(matrix(wholeres@model$eigenvectors$pc1,nrow=16), col = gray(0:32 / 32))
 ```
+From the first plot we can see that the proportion of variance falls drastically after a few components, and the sd in the last few components(~25) are smaller then 1 so they don't carry any information.
 
+By plotting just the first principle component we can see that the most relevant pixels are in the middle and the ones on the corners doesn't have any variance, they are just black... 
 
 ## Each number separately
-```{r}
-
+We can see on the images which pixels are most 'relevant' for a specific number.
+```{r,  message=FALSE, error=FALSE,warning=FALSE}
 for(i in 0:9){
   numdata <- labeled_data[labeled_data$lab == i,]
   dfname <- paste('usps_',i,sep = "")
@@ -79,43 +105,47 @@ for(i in 0:9){
   cumul_prop <- rbind(cumul_prop,c_prop)
   numres <- data.frame(x=1:length(c_prop["all",]),cumprop=t(c_prop["all",]),label=dfname)
   allres <- rbind(allres,numres)
+  image(matrix(pcares@model$eigenvectors$pc1,nrow=16), col = gray(0:32 / 32))
 }
-plot_ly(allres,x=~x,y=~all,color=~label)%>%add_lines()
 
 ```
 
+### And the cumulative proportion plot
+The numbers(lines) can be hidden by clicking on the plot 'legend'(labels)
+```{r,  message=FALSE, error=FALSE,warning=FALSE}
+plot_ly(allres,x=~x,y=~all,color=~label)%>%add_lines()
+```
 
-```{r}
+
+```{r message=FALSE, error=FALSE,warning=FALSE}
 summary(wholeres)
 ```
 
 
 
 
-
-### Eigenvectors
-```{r}
- 
-pcares@model$eigenvectors$pc1
-```
 ## 2D and 3D projection (2,3 eigendirections){.tabset}
-```{r}
+
+If we just want to inspect 2 classes we can turn off the others as on the other plot.
+
+For example if we check the 5 and 6 we can see that in 2D we can't really separate the 2 classes but in 3D the data looks more promising.
+```{r, message=FALSE, error=FALSE,warning=FALSE}
 lb2 <- lapply(lab,as.character) #to have labels
 proj <- data.matrix(data[,]) %*% cbind(wholeres@model$eigenvectors$pc1,wholeres@model$eigenvectors$pc2,wholeres@model$eigenvectors$pc3)
 proj <- data.frame(x=proj[,1],y=proj[,2],z=proj[,3],label=lb2$lab)
 
 ```
+
+
+
 ### 2D
-```{r}
-plot_ly(proj,x=~x,y=~y,color =~label,type ='scatter',text=~label) #3d
+```{r, message=FALSE, error=FALSE,warning=FALSE}
+plot_ly(proj,x=~x,y=~y,color =~label,type ='scatter',text=~label)%>% toWebGL() #2d
 ```
 
 ### 3D
-```{r}
-plot_ly(proj,x=~x,y=~y,z=~z,color =~label,type ='scatter3d',text=~label) #3d
+```{r, message=FALSE, error=FALSE,warning=FALSE}
+plot_ly(proj,x=~x,y=~y,z=~z,color =~label,type ='scatter3d',text=~label) %>% toWebGL() #3d
 ```
 
 
-
-
-###
